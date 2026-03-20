@@ -22,11 +22,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 3. ปั่นไฟล์สำหรับ Web (Release mode)
+      # 3. เสกไฟล์ .env จากตู้เซฟ GitHub (อันนี้คือบรรทัดที่ต้องเพิ่ม!)
+      - name: Create .env file
+        run: echo "${{ secrets.ENV_FILE }}" > .env
+
+      # 4. ปั่นไฟล์สำหรับ Web (Release mode)
       - name: Build Web
         run: flutter build web --release
 
-      # 4. ส่งขึ้น Firebase Hosting
+      # 5. ส่งขึ้น Firebase Hosting
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
