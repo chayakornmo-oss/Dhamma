@@ -22,9 +22,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 3. เสกไฟล์ .env จากตู้เซฟ GitHub (อันนี้คือบรรทัดที่ต้องเพิ่ม!)
-      - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+      # 3. เสกไฟล์ env.txt จากตู้เซฟ GitHub
+      - name: Create env.txt file
+        run: echo "${{ secrets.ENV_FILE }}" > env.txt
 
       # 4. ปั่นไฟล์สำหรับ Web (Release mode)
       - name: Build Web

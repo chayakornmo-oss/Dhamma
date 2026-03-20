@@ -7,7 +7,7 @@ class AppEnv {
   AppEnv._();
 
   static Future<void> load() async {
-    await dotenv.load(fileName: '.env');
+    await dotenv.load(fileName: 'env.txt');
   }
 
   // ── Firebase Web ─────────────────────────────────────────────────
@@ -40,7 +40,7 @@ class AppEnv {
     if (value == null || value.isEmpty) {
       throw StateError(
         'Missing required environment variable: $key\n'
-        'Please add it to your .env file.',
+        'Please add it to your env.txt file.',
       );
     }
     return value;
