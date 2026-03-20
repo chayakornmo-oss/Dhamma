@@ -59,18 +59,20 @@ class _RouterNotifier extends ChangeNotifier {
   AsyncValue<User?> _auth = const AsyncValue.loading();
 
   _RouterNotifier(this._ref) {
-    // Seed with current values — ref.listen only fires on *changes*, so if
-    // the providers already resolved before this notifier was created we would
-    // otherwise stay on AsyncValue.loading() forever.
+    // Seed auth synchronously from FirebaseAuth.instance.currentUser.
+    // authStateStreamProvider uses asyncMap (for logging side-effects) which
+    // delays the first emission — leaving _auth in loading state and freezing
+    // the splash screen. currentUser is always accurate and never async.
+    _auth = AsyncValue.data(FirebaseAuth.instance.currentUser);
     _onboarding = _ref.read(onboardingProvider);
-    _auth = _ref.read(authStateStreamProvider);
 
-    _ref.listen<AsyncValue<bool>>(onboardingProvider, (_, next) {
-      _onboarding = next;
-      notifyListeners();
-    });
+    // Keep listening so any subsequent sign-in / sign-out updates the router.
     _ref.listen<AsyncValue<User?>>(authStateStreamProvider, (_, next) {
       _auth = next;
+      notifyListeners();
+    });
+    _ref.listen<AsyncValue<bool>>(onboardingProvider, (_, next) {
+      _onboarding = next;
       notifyListeners();
     });
   }
