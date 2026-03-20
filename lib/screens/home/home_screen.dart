@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/dhamma_theme.dart';
-import '../../router/app_router.dart';
 
-class HomeScreen extends StatelessWidget {
+import '../../core/providers/app_state_providers.dart';
+import '../../services/firestore_service.dart';
+import '../../models/vow_model.dart';
+import '../../router/app_router.dart';
+import '../../services/fortune_service.dart';
+import '../../theme/dhamma_theme.dart';
+
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return const Scaffold(
       backgroundColor: DhammaTheme.ink,
       body: CustomScrollView(
@@ -28,11 +34,16 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _HomeHeader extends StatelessWidget {
+// ── Header ────────────────────────────────────────────────────────────
+class _HomeHeader extends ConsumerWidget {
   const _HomeHeader();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userName = ref.watch(userNameProvider);
+    final streak = ref.watch(userStreakProvider);
+    final today = FortuneService.thaiDateString(DateTime.now());
+
     return SliverAppBar(
       expandedHeight: 120,
       backgroundColor: Colors.transparent,
@@ -50,7 +61,7 @@ class _HomeHeader extends StatelessWidget {
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -59,7 +70,7 @@ class _HomeHeader extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'สวัสดี, คุณนุ่น',
+                        'สวัสดี, $userName',
                         style: GoogleFonts.notoSerifThai(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -67,35 +78,41 @@ class _HomeHeader extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'วันพฤหัสบดีที่ 19 มีนาคม',
+                        today,
                         style: GoogleFonts.sarabun(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: Colors.white70,
                         ),
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: DhammaTheme.gold.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('🔥', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 4),
-                        Text(
-                          '12 วัน',
-                          style: GoogleFonts.sarabun(
-                            color: DhammaTheme.gold,
-                            fontWeight: FontWeight.bold,
-                          ),
+                  if (streak > 0)
+                    GestureDetector(
+                      onTap: () => context.go(AppRoutes.profile),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: DhammaTheme.gold.withOpacity(0.3)),
                         ),
-                      ],
+                        child: Row(
+                          children: [
+                            const Text('🔥', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$streak วัน',
+                              style: GoogleFonts.sarabun(
+                                color: DhammaTheme.gold,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -106,64 +123,86 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _FortuneCard extends StatelessWidget {
+// ── Fortune Card ──────────────────────────────────────────────────────
+class _FortuneCard extends ConsumerWidget {
   const _FortuneCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(userProfileProvider).valueOrNull;
+    final fortune = FortuneService.computeFortune(birthYear: profile?.birthYear);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: DhammaTheme.gold.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Text('✨', style: TextStyle(fontSize: 18)),
-                    const SizedBox(width: 8),
-                    Text(
-                      'ดวงวันนี้ปังแค่ไหน?',
-                      style: GoogleFonts.notoSerifThai(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: DhammaTheme.gold2,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: GestureDetector(
+        onTap: () => context.go(AppRoutes.fortune),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: DhammaTheme.gold.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Text('✨', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 8),
+                      Text(
+                        'ดวงวันนี้',
+                        style: GoogleFonts.notoSerifThai(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: DhammaTheme.gold2,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.white54),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'การงานราบรื่น มีผู้ใหญ่คอยอุปถัมภ์ ระวังแค่คำพูดช่วงบ่าย...',
-              style: GoogleFonts.sarabun(
-                fontSize: 14,
-                color: Colors.white70,
+                    ],
+                  ),
+                  Row(
+                    children: List.generate(5, (i) => Icon(
+                      Icons.star,
+                      size: 14,
+                      color: i < fortune.fortuneScore
+                          ? DhammaTheme.gold
+                          : Colors.white12,
+                    )),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('สีมงคล:', style: GoogleFonts.sarabun(color: Colors.white54, fontSize: 13)),
-                const SizedBox(width: 8),
-                const _ColorDot(Colors.orange),
-                const _ColorDot(Colors.white),
-                const _ColorDot(Colors.blue),
-              ],
-            )
-          ],
-        ),
-      ).animate().fadeIn().slideY(begin: 0.1),
+              const SizedBox(height: 12),
+              Text(
+                fortune.prediction,
+                style: GoogleFonts.sarabun(
+                  fontSize: 14,
+                  color: Colors.white70,
+                  height: 1.6,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    'สีมงคล:',
+                    style: GoogleFonts.sarabun(
+                        color: Colors.white54, fontSize: 13),
+                  ),
+                  const SizedBox(width: 8),
+                  ...fortune.luckyColors.map(
+                    (c) => _ColorDot(Color(c.colorValue)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ).animate().fadeIn().slideY(begin: 0.1),
+      ),
     );
   }
 }
@@ -187,13 +226,14 @@ class _ColorDot extends StatelessWidget {
   }
 }
 
+// ── Menu Grid ─────────────────────────────────────────────────────────
 class _MenuGrid extends StatelessWidget {
   const _MenuGrid();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -267,13 +307,19 @@ class _MenuShortcut extends StatelessWidget {
   }
 }
 
-class _VowDashboard extends StatelessWidget {
+// ── Vow Dashboard ─────────────────────────────────────────────────────
+class _VowDashboard extends ConsumerWidget {
   const _VowDashboard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vowsAsync =
+        ref.watch(StreamProvider.autoDispose<List<VowModel>>((ref) {
+      return ref.watch(firestoreServiceProvider).getVows();
+    }));
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -302,68 +348,71 @@ class _VowDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          const Row(
-            children: [
-              _VowStat(label: 'รอผล', count: '3', color: DhammaTheme.gold),
-              _VowStat(label: 'ต้องแก้บน', count: '1', color: DhammaTheme.lotus),
-              _VowStat(label: 'สำเร็จ', count: '12', color: DhammaTheme.sage),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: DhammaTheme.gold.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: DhammaTheme.gold.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: DhammaTheme.gold.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text('🔔', style: TextStyle(fontSize: 20)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          vowsAsync.when(
+            loading: () => const _VowStatsShimmer(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (vows) {
+              final pending =
+                  vows.where((v) => v.status == VowStatus.pending).length;
+              final urgent =
+                  vows.where((v) => v.status == VowStatus.urgent).length;
+              final done =
+                  vows.where((v) => v.status == VowStatus.done).length;
+
+              return Column(
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'ผ่านมา 1 สัปดาห์แล้ว',
-                        style: GoogleFonts.sarabun(
-                          fontSize: 12,
-                          color: DhammaTheme.gold2,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'พรที่ขอเรื่องงาน เป็นยังไงบ้าง?',
-                        style: GoogleFonts.sarabun(
-                          fontSize: 14,
-                          color: Colors.white,
-                        ),
-                      ),
+                      _VowStat(
+                          label: 'รอผล',
+                          count: '$pending',
+                          color: DhammaTheme.gold),
+                      _VowStat(
+                          label: 'ต้องแก้บน',
+                          count: '$urgent',
+                          color: DhammaTheme.lotus),
+                      _VowStat(
+                          label: 'สำเร็จ',
+                          count: '$done',
+                          color: DhammaTheme.sage),
                     ],
                   ),
-                ),
-                TextButton(
-                  onPressed: () => context.go(AppRoutes.vow),
-                  style: TextButton.styleFrom(
-                    foregroundColor: DhammaTheme.ink,
-                    backgroundColor: DhammaTheme.gold,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: const Text('อัปเดตสถานะ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
+                  if (urgent > 0) ...[
+                    const SizedBox(height: 16),
+                    _UrgentVowBanner(urgentCount: urgent),
+                  ],
+                ],
+              );
+            },
           ),
         ],
       ).animate().fadeIn(delay: 400.ms),
+    );
+  }
+}
+
+class _VowStatsShimmer extends StatelessWidget {
+  const _VowStatsShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(
+        3,
+        (_) => Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(right: 8),
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ).animate(onPlay: (c) => c.repeat()).shimmer(
+                duration: 1500.ms,
+                color: Colors.white.withOpacity(0.05),
+              ),
+        ),
+      ),
     );
   }
 }
@@ -373,7 +422,8 @@ class _VowStat extends StatelessWidget {
   final String count;
   final Color color;
 
-  const _VowStat({required this.label, required this.count, required this.color});
+  const _VowStat(
+      {required this.label, required this.count, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -398,9 +448,75 @@ class _VowStat extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: GoogleFonts.sarabun(
-                fontSize: 12,
-                color: Colors.white70,
+              style:
+                  GoogleFonts.sarabun(fontSize: 12, color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UrgentVowBanner extends StatelessWidget {
+  final int urgentCount;
+  const _UrgentVowBanner({required this.urgentCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.go(AppRoutes.vow),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: DhammaTheme.gold.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: DhammaTheme.gold.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: DhammaTheme.gold.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Text('🔔', style: TextStyle(fontSize: 20)),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'มี $urgentCount คำขอที่ต้องแก้บน',
+                    style: GoogleFonts.sarabun(
+                      fontSize: 12,
+                      color: DhammaTheme.gold2,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'แตะเพื่อดูรายละเอียดและอัปเดตสถานะ',
+                    style: GoogleFonts.sarabun(
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.go(AppRoutes.vow),
+              style: TextButton.styleFrom(
+                foregroundColor: DhammaTheme.ink,
+                backgroundColor: DhammaTheme.gold,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text(
+                'อัปเดต',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
               ),
             ),
           ],

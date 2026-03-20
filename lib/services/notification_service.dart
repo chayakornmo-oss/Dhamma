@@ -3,18 +3,20 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import '../core/navigation/navigation_service.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  // ── Initialize ──────────────────────────────
+  // ── Initialize ──────────────────────────────────────────────────
   static Future<void> initialize() async {
     if (kIsWeb) return;
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Bangkok'));
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -22,32 +24,52 @@ class NotificationService {
     );
 
     await _plugin.initialize(
-      const InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      ),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _onNotificationTapped,
+      onDidReceiveBackgroundNotificationResponse: _onNotificationTapped,
     );
 
-    // Firebase Messaging
+    // Handle FCM messages while the app is terminated (cold start)
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message?.data['route'] != null) {
+        // Defer navigation until the router is mounted
+        Future.delayed(const Duration(milliseconds: 500), () {
+          NavigationService.goTo(message!.data['route'] as String);
+        });
+      }
+    });
+
+    // Handle FCM messages while the app is in the background
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      if (message.data['route'] != null) {
+        NavigationService.goTo(message.data['route'] as String);
+      }
+    });
+
+    // Request permission (Android 13+)
     await FirebaseMessaging.instance.requestPermission(
-      alert: true, badge: true, sound: true,
+      alert: true,
+      badge: true,
+      sound: true,
     );
 
-    // Schedule daily rituals
     await scheduleDailyRituals();
   }
 
+  // ── Notification Tap Handler ─────────────────────────────────────
+  @pragma('vm:entry-point')
   static void _onNotificationTapped(NotificationResponse response) {
-    // TODO: Navigate based on payload
-    print('Notification tapped: ${response.payload}');
+    final payload = response.payload;
+    if (payload != null && payload.isNotEmpty) {
+      NavigationService.goTo(payload);
+    }
   }
 
-  // ── Daily Rituals Schedule ──────────────────
+  // ── Daily Rituals Schedule ──────────────────────────────────────
   static Future<void> scheduleDailyRituals() async {
     await _cancelAll();
 
-    // 06:30 — Morning auspicious colors
+    // 06:30 — Morning auspicious notification → Check-in
     await _scheduleDaily(
       id: 1,
       title: _morningTitles[DateTime.now().weekday % _morningTitles.length],
@@ -58,7 +80,7 @@ class NotificationService {
       sound: 'bell_soft',
     );
 
-    // 21:00 — Evening reflection
+    // 21:00 — Evening reflection → Check-in
     await _scheduleDaily(
       id: 2,
       title: '🌙 วันนี้เป็นยังไงบ้าง?',
@@ -70,7 +92,7 @@ class NotificationService {
     );
   }
 
-  // ── Vow Reminder ────────────────────────────
+  // ── Vow Reminder ────────────────────────────────────────────────
   static Future<void> scheduleVowReminder({
     required String vowId,
     required String templeName,
@@ -107,20 +129,23 @@ class NotificationService {
     );
   }
 
-  // ── Weekly Vow Summary ───────────────────────
+  // ── Weekly Vow Summary ───────────────────────────────────────────
   static Future<void> scheduleWeeklyVowSummary(int pendingCount) async {
-    // Every Sunday 19:00
     final now = tz.TZDateTime.now(tz.local);
     final daysUntilSunday = (7 - now.weekday) % 7;
     final nextSunday = tz.TZDateTime(
       tz.local,
-      now.year, now.month, now.day + daysUntilSunday,
-      19, 0, 0,
+      now.year,
+      now.month,
+      now.day + daysUntilSunday,
+      19,
+      0,
+      0,
     );
 
     await _plugin.zonedSchedule(
       999,
-      '📊 สรุปรายเดือน',
+      '📊 สรุปรายสัปดาห์',
       'คุณมี $pendingCount คำขอ pending อยู่ ลองเช็คซักที',
       nextSunday,
       NotificationDetails(
@@ -139,13 +164,13 @@ class NotificationService {
     );
   }
 
-  // ── Re-engagement ────────────────────────────
+  // ── Re-engagement ────────────────────────────────────────────────
   static Future<void> scheduleReEngagement({
     required int daysInactive,
     required String userName,
     required String lastVowTemple,
   }) async {
-    final messages = {
+    final messages = <int, ({String title, String body})>{
       3: (
         title: '🌸 วันนี้มีอะไรอยากบอกเราไหม?',
         body: 'เราอยู่ที่นี่เสมอนะ',
@@ -179,7 +204,7 @@ class NotificationService {
     );
   }
 
-  // ── Sangha Update (Photo notification) ──────
+  // ── Sangha Update (Photo notification) ──────────────────────────
   static Future<void> showSanghaUpdate({
     required String orderId,
     required String templeName,
@@ -197,9 +222,7 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           styleInformation: imageUrl != null
-              ? BigPictureStyleInformation(
-                  FilePathAndroidBitmap(imageUrl),
-                )
+              ? BigPictureStyleInformation(FilePathAndroidBitmap(imageUrl))
               : null,
         ),
         iOS: const DarwinNotificationDetails(
@@ -207,11 +230,11 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      payload: '/sangha/$orderId',
+      payload: '/vow',
     );
   }
 
-  // ── Helpers ──────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────
   static Future<void> _scheduleDaily({
     required int id,
     required String title,
@@ -222,9 +245,8 @@ class NotificationService {
     String? sound,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(
-      tz.local, now.year, now.month, now.day, hour, minute,
-    );
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
@@ -239,7 +261,9 @@ class NotificationService {
           'daily_ritual',
           'Daily Ritual',
           importance: Importance.high,
-          sound: sound != null ? RawResourceAndroidNotificationSound(sound) : null,
+          sound: sound != null
+              ? RawResourceAndroidNotificationSound(sound)
+              : null,
         ),
         iOS: DarwinNotificationDetails(
           sound: sound != null ? '$sound.aiff' : null,
@@ -253,11 +277,8 @@ class NotificationService {
     );
   }
 
-  static Future<void> _cancelAll() async {
-    await _plugin.cancelAll();
-  }
+  static Future<void> _cancelAll() async => _plugin.cancelAll();
 
-  // Morning notification variants
   static const _morningTitles = [
     '🌸 วันนี้สีทองรออยู่นะ',
     '🌅 อรุณสวัสดิ์ วันนี้พิเศษมาก',

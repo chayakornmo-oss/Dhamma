@@ -3,9 +3,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/providers/app_state_providers.dart';
+import '../../services/firestore_service.dart';
 import '../../theme/dhamma_theme.dart';
 import '../../router/app_router.dart';
 import '../../services/ai_service.dart';
+import '../../services/fortune_service.dart';
 
 enum Mood { anxious, tired, normal, good, great }
 
@@ -43,12 +46,11 @@ class DailyCheckinScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedMood = ref.watch(selectedMoodProvider);
-    final userName = 'คุณนุ่น'; // TODO: get from SharedPreferences
-
-    // Today's fortune (mock - replace with real calculation)
-    final todayColors = ['ส้ม 🧡', 'ขาว 🤍', 'น้ำเงิน 💙'];
-    final todayPrediction =
-        'มีเกณฑ์เรื่องการสื่อสาร หยุดคิดก่อนพูดสักนิด ช่วงบ่ายโชคดีเรื่องการเงิน';
+    final userName = ref.watch(userNameProvider);
+    final profile = ref.watch(userProfileProvider).valueOrNull;
+    final fortune = FortuneService.computeFortune(birthYear: profile?.birthYear);
+    final todayColors = fortune.luckyColors.map((c) => c.name).toList();
+    final todayPrediction = fortune.prediction;
 
     return Scaffold(
       body: Container(
@@ -152,7 +154,7 @@ class DailyCheckinScreen extends ConsumerWidget {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => _enterDay(context),
+                    onPressed: () => _enterDay(context, ref),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: DhammaTheme.gold,
                     ),
@@ -172,8 +174,20 @@ class DailyCheckinScreen extends ConsumerWidget {
     );
   }
 
-  void _enterDay(BuildContext context) {
-    context.go(AppRoutes.home);
+  Future<void> _enterDay(BuildContext context, WidgetRef ref) async {
+    final selectedMood = ref.read(selectedMoodProvider);
+    if (selectedMood != null) {
+      try {
+        final rec = await AIService.getPrayerRecommendation(selectedMood);
+        await ref.read(firestoreServiceProvider).addCheckin(
+          mood: selectedMood.name,
+          prayerRecommended: rec,
+        );
+      } catch (_) {
+        // Non-blocking — checkin UI proceeds even if save fails
+      }
+    }
+    if (context.mounted) context.go(AppRoutes.home);
   }
 }
 
@@ -400,7 +414,7 @@ class _TodayBanner extends StatelessWidget {
                 ),
               ),
               Text(
-                'พฤหัส 19 มี.ค.',
+                FortuneService.shortThaiDate(DateTime.now()),
                 style: GoogleFonts.sarabun(
                   fontSize: 12,
                   color: Colors.white.withOpacity(0.4),

@@ -1,6 +1,13 @@
-import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../core/navigation/navigation_service.dart';
+import '../core/providers/app_state_providers.dart';
+import '../screens/auth/login_screen.dart';
+import '../screens/auth/register_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/onboarding/onboarding_screen.dart';
@@ -16,9 +23,17 @@ import '../screens/profile/profile_screen.dart';
 import '../screens/checkin/daily_checkin_screen.dart';
 
 class AppRoutes {
+  // ── Auth ─────────────────────────────────────────────────────────
   static const splash = '/splash';
+  static const login = '/login';
+  static const register = '/register';
+  static const forgotPassword = '/forgot-password';
+
+  // ── Onboarding ───────────────────────────────────────────────────
   static const onboarding = '/onboarding';
   static const birthDate = '/birth-date';
+
+  // ── Main ─────────────────────────────────────────────────────────
   static const checkin = '/checkin';
   static const home = '/home';
   static const vow = '/vow';
@@ -30,14 +45,99 @@ class AppRoutes {
   static const profile = '/profile';
 }
 
+// ── RouterNotifier ────────────────────────────────────────────────────
+/// Bridges Riverpod state (auth + onboarding) into GoRouter's
+/// refreshListenable so route guards re-evaluate on state changes.
+class _RouterNotifier extends ChangeNotifier {
+  final Ref _ref;
+  bool _isOnboarded = false;
+  AsyncValue<User?> _auth = const AsyncValue.loading();
+
+  _RouterNotifier(this._ref) {
+    _ref.listen<AsyncValue<bool>>(onboardingProvider, (_, next) {
+      _isOnboarded = next.valueOrNull ?? false;
+      notifyListeners();
+    });
+    _ref.listen<AsyncValue<User?>>(authStateStreamProvider, (_, next) {
+      _auth = next;
+      notifyListeners();
+    });
+  }
+
+  String? redirect(BuildContext context, GoRouterState state) {
+    final path = state.uri.toString();
+
+    // ── Still loading Firebase auth ──────────────────────────────
+    if (_auth.isLoading) {
+      return path == AppRoutes.splash ? null : AppRoutes.splash;
+    }
+
+    final user = _auth.valueOrNull;
+    final hasUser = user != null;
+
+    final isOnSplash = path == AppRoutes.splash;
+    final isOnAuthFlow = path == AppRoutes.login ||
+        path == AppRoutes.register ||
+        path == AppRoutes.forgotPassword;
+    final isOnOnboardingFlow =
+        path == AppRoutes.onboarding || path == AppRoutes.birthDate;
+
+    // ── No authenticated user → Login ────────────────────────────
+    if (!hasUser) {
+      if (isOnSplash || isOnAuthFlow) return null;
+      return AppRoutes.login;
+    }
+
+    // ── Has user but not onboarded → Onboarding ──────────────────
+    if (hasUser && !_isOnboarded) {
+      if (isOnOnboardingFlow) return null;
+      // Allow splash/login to redirect to onboarding
+      return AppRoutes.onboarding;
+    }
+
+    // ── Has user and is onboarded → Home ─────────────────────────
+    if (hasUser && _isOnboarded) {
+      if (isOnSplash || isOnAuthFlow || isOnOnboardingFlow) {
+        return AppRoutes.home;
+      }
+    }
+
+    return null;
+  }
+}
+
+final _routerNotifierProvider =
+    ChangeNotifierProvider<_RouterNotifier>((ref) => _RouterNotifier(ref));
+
+// ── GoRouter Provider ─────────────────────────────────────────────────
 final appRouterProvider = Provider<GoRouter>((ref) {
-  return GoRouter(
+  final notifier = ref.watch(_routerNotifierProvider);
+
+  final router = GoRouter(
+    navigatorKey: NavigationService.navigatorKey,
     initialLocation: AppRoutes.splash,
+    refreshListenable: notifier,
+    redirect: notifier.redirect,
     routes: [
+      // ── Auth ────────────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.splash,
         builder: (context, state) => const SplashScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+
+      // ── Onboarding ──────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
@@ -46,10 +146,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.birthDate,
         builder: (context, state) => const BirthDateScreen(),
       ),
+
+      // ── Daily check-in (full-screen, no shell) ──────────────────
       GoRoute(
         path: AppRoutes.checkin,
         builder: (context, state) => const DailyCheckinScreen(),
       ),
+
+      // ── Main shell (bottom nav) ──────────────────────────────────
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
@@ -65,7 +169,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: 'detail',
                 builder: (context, state) => const PrayerDetailScreen(),
               ),
-            ]
+            ],
           ),
           GoRoute(
             path: AppRoutes.vow,
@@ -75,7 +179,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: 'add',
                 builder: (context, state) => const AddVowScreen(),
               ),
-            ]
+            ],
           ),
           GoRoute(
             path: AppRoutes.fortune,
@@ -93,4 +197,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  NavigationService.setRouter(router);
+  return router;
 });
