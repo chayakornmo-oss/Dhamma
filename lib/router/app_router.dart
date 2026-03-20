@@ -80,26 +80,22 @@ class _RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final path = state.uri.toString();
 
-    // ── Wait for both auth and onboarding to be known ────────────
+    // Splash navigates itself — never redirect away from it here.
+    if (path == AppRoutes.splash) return null;
+
+    // If state is still loading, hold on splash.
     if (_auth.isLoading || _onboarding.isLoading) {
-      return path == AppRoutes.splash ? null : AppRoutes.splash;
+      return AppRoutes.splash;
     }
 
     final isLoggedIn = _auth.valueOrNull != null;
     final isOnboarded = _onboarding.valueOrNull ?? false;
 
-    final isOnSplash = path == AppRoutes.splash;
     final isOnAuthFlow = path == AppRoutes.login ||
         path == AppRoutes.register ||
         path == AppRoutes.forgotPassword;
     final isOnOnboardingFlow =
         path == AppRoutes.onboarding || path == AppRoutes.birthDate;
-
-    // ── Splash: always navigate away once state is known ─────────
-    if (isOnSplash) {
-      if (!isOnboarded) return AppRoutes.onboarding;
-      return AppRoutes.home;
-    }
 
     // ── Onboarding gate ───────────────────────────────────────────
     if (!isOnboarded && !isOnOnboardingFlow) {

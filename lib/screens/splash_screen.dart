@@ -1,13 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/providers/app_state_providers.dart';
+import '../router/app_router.dart';
 import '../theme/dhamma_theme.dart';
 
-/// Pure visual splash. All navigation is handled by GoRouter's redirect
-/// which fires once Firebase auth emits its first state.
-class SplashScreen extends StatelessWidget {
+/// Splash screen that actively resolves auth + onboarding state then
+/// navigates itself. Falls back after 3 s so the app never freezes even
+/// if Firebase auth stream is slow or SharedPreferences hangs.
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
+
+  @override
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends ConsumerState<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _resolveAndNavigate();
+  }
+
+  Future<void> _resolveAndNavigate() async {
+    // Wait for both providers — each capped at 3 s so we never get stuck.
+    await Future.wait([
+      ref
+          .read(authStateStreamProvider.future)
+          .timeout(const Duration(seconds: 3), onTimeout: () => null),
+      ref
+          .read(onboardingProvider.future)
+          .timeout(const Duration(seconds: 3), onTimeout: () => false),
+    ]);
+
+    if (!mounted) return;
+
+    final isOnboarded = ref.read(onboardingProvider).valueOrNull ?? false;
+
+    if (isOnboarded) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.onboarding);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
