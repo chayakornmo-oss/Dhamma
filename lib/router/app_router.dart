@@ -80,13 +80,14 @@ class _RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final path = state.uri.toString();
 
-    // Splash navigates itself — never redirect away from it here.
+    // Splash handles its own navigation — never intercept it.
     if (path == AppRoutes.splash) return null;
 
-    // If state is still loading, hold on splash.
-    if (_auth.isLoading || _onboarding.isLoading) {
-      return AppRoutes.splash;
-    }
+    // While providers are still loading, let all navigation through.
+    // SplashScreen owns initial routing; guards apply only once state is known.
+    // Returning splash here would deadlock: splash navigates → redirect
+    // sends back → splash already finished → frozen forever.
+    if (_auth.isLoading || _onboarding.isLoading) return null;
 
     final isLoggedIn = _auth.valueOrNull != null;
     final isOnboarded = _onboarding.valueOrNull ?? false;

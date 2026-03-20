@@ -23,8 +23,11 @@ jobs:
         run: flutter pub get
 
       # 3. เสกไฟล์ env.txt จากตู้เซฟ GitHub
+      #    ใช้ env: block แทน inline expansion เพื่อรองรับ multiline + special chars
       - name: Create env.txt file
-        run: echo "${{ secrets.ENV_FILE }}" > env.txt
+        run: printf '%s' "$ENV_FILE" > env.txt
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
 
       # 4. ปั่นไฟล์สำหรับ Web (Release mode)
       - name: Build Web
