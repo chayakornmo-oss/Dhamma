@@ -5,7 +5,11 @@
       "Bash(flutter pub:*)",
       "Bash(flutter analyze:*)",
       "Bash(flutter build:*)",
-      "Bash(flutter create:*)"
+      "Bash(flutter create:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(gh run:*)",
+      "Bash(cp .env env.txt)",
+      "Bash(echo \"Copied .env -> env.txt\")"
     ]
   }
 }
