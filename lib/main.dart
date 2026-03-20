@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/app_env.dart';
+import 'core/providers/app_state_providers.dart';
 import 'router/app_router.dart';
 import 'services/log_service.dart';
 import 'services/notification_service.dart';
@@ -74,6 +75,21 @@ class DhammaPlusApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authAsync = ref.watch(authStateStreamProvider);
+    final onboardingAsync = ref.watch(onboardingProvider);
+
+    // Show a static (non-navigating) splash while Firebase Auth or
+    // SharedPreferences are still initialising. The moment both are known
+    // (or the 3-s timeout in _RouterNotifier fires), the full router takes
+    // over and SplashScreen._resolveAndNavigate() routes to the right page.
+    if (authAsync.isLoading || onboardingAsync.isLoading) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: DhammaTheme.lightTheme,
+        home: const _StaticSplash(),
+      );
+    }
+
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
@@ -92,6 +108,22 @@ class DhammaPlusApp extends ConsumerWidget {
           child: child!,
         );
       },
+    );
+  }
+}
+
+// ── Static splash (no navigation logic) ──────────────────────────────
+// Shown while auth/onboarding providers are still loading.
+class _StaticSplash extends StatelessWidget {
+  const _StaticSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: DhammaTheme.ink,
+      body: Center(
+        child: Text('🪷', style: TextStyle(fontSize: 80)),
+      ),
     );
   }
 }
