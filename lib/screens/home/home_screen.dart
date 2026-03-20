@@ -11,6 +11,10 @@ import '../../router/app_router.dart';
 import '../../services/fortune_service.dart';
 import '../../theme/dhamma_theme.dart';
 
+final _homeVowsProvider = StreamProvider.autoDispose<List<VowModel>>((ref) {
+  return ref.watch(firestoreServiceProvider).getVows();
+});
+
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -313,10 +317,7 @@ class _VowDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final vowsAsync =
-        ref.watch(StreamProvider.autoDispose<List<VowModel>>((ref) {
-      return ref.watch(firestoreServiceProvider).getVows();
-    }));
+    final vowsAsync = ref.watch(_homeVowsProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
