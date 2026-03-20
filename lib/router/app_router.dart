@@ -55,12 +55,12 @@ class AppRoutes {
 /// refreshListenable so route guards re-evaluate on state changes.
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
-  bool _isOnboarded = false;
+  AsyncValue<bool> _onboarding = const AsyncValue.loading();
   AsyncValue<User?> _auth = const AsyncValue.loading();
 
   _RouterNotifier(this._ref) {
     _ref.listen<AsyncValue<bool>>(onboardingProvider, (_, next) {
-      _isOnboarded = next.valueOrNull ?? false;
+      _onboarding = next;
       notifyListeners();
     });
     _ref.listen<AsyncValue<User?>>(authStateStreamProvider, (_, next) {
@@ -72,13 +72,13 @@ class _RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final path = state.uri.toString();
 
-    // ── Still loading Firebase auth → stay on splash ─────────────
-    if (_auth.isLoading) {
+    // ── Wait for both auth and onboarding to be known ────────────
+    if (_auth.isLoading || _onboarding.isLoading) {
       return path == AppRoutes.splash ? null : AppRoutes.splash;
     }
 
-    final user = _auth.valueOrNull;
-    final isLoggedIn = user != null;
+    final isLoggedIn = _auth.valueOrNull != null;
+    final isOnboarded = _onboarding.valueOrNull ?? false;
 
     final isOnSplash = path == AppRoutes.splash;
     final isOnAuthFlow = path == AppRoutes.login ||
@@ -87,26 +87,24 @@ class _RouterNotifier extends ChangeNotifier {
     final isOnOnboardingFlow =
         path == AppRoutes.onboarding || path == AppRoutes.birthDate;
 
-    // ── Onboarding gate (applies to both guests and logged-in) ───
-    // If user hasn't completed onboarding, only allow onboarding screens.
-    if (!_isOnboarded && !isOnSplash && !isOnAuthFlow && !isOnOnboardingFlow) {
+    // ── Splash: always navigate away once state is known ─────────
+    if (isOnSplash) {
+      if (!isOnboarded) return AppRoutes.onboarding;
+      return AppRoutes.home;
+    }
+
+    // ── Onboarding gate ───────────────────────────────────────────
+    if (!isOnboarded && !isOnOnboardingFlow) {
       return AppRoutes.onboarding;
     }
 
     // ── Freemium gate: restricted routes require login ────────────
-    if (_isOnboarded && !isLoggedIn && AppRoutes.isRestricted(path)) {
+    if (isOnboarded && !isLoggedIn && AppRoutes.isRestricted(path)) {
       return AppRoutes.login;
     }
 
-    // ── Already authenticated → skip auth/onboarding screens ─────
-    if (isLoggedIn && _isOnboarded) {
-      if (isOnSplash || isOnAuthFlow || isOnOnboardingFlow) {
-        return AppRoutes.home;
-      }
-    }
-
-    // ── Onboarded guest on splash → go home ──────────────────────
-    if (!isLoggedIn && _isOnboarded && isOnSplash) {
+    // ── Logged-in user on auth/onboarding screens → home ─────────
+    if (isLoggedIn && isOnboarded && (isOnAuthFlow || isOnOnboardingFlow)) {
       return AppRoutes.home;
     }
 
